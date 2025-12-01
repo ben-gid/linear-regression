@@ -1,7 +1,41 @@
 import math
-from typing import Callable
 import numpy as np
+from typing import Callable
+from numpy.typing import NDArray
 
+def main():
+    x_train = np.array([1.0, 2.0])   #features
+    y_train = np.array([300.0, 500.0])   #target value
+    # initialize parameters
+    w_init = 0
+    b_init = 0
+    # some gradient descent settings
+    iterations = 100000
+    alpha = 1.0e-2
+    # run gradient descent
+    w_final, b_final, _, _ = gradient_descent(x_train ,y_train, w_init, b_init, alpha, 
+                                                        iterations, mean_squared_error, compute_gradients)
+    print(f"(w,b) found by gradient descent: ({w_final:8.4f},{b_final:8.4f})")
+
+def main2():
+    x_train = np.array([1.0, 2.0])   #features
+    y_train = np.array([300.0, 500.0])   #target value
+    w = 0. # weight
+    b = 0. # base
+    alpha = 1.0e-2 # learning rate
+    
+    for _ in range(100_000):
+        y_hats = predict(x_train, w, b)
+        
+        dj_dw, dj_db = compute_gradients(x_train, y_train, w, b)
+        
+        w -= alpha * dj_dw
+        b -= alpha * dj_db
+    print(f"(w,b) found by gradient descent: ({w:8.4f},{b:8.4f})")
+    y_hats = predict(x_train, w, b)
+    cost = mean_squared_error(y_hats, y_train)
+    print(f"final_cost:{cost:.10f}")
+    
 def mean_squared_error(y_hats: np.ndarray, ys: np.ndarray) -> np.float64:
     """_summary_
 
@@ -92,7 +126,7 @@ def gradient_descent(
     cost_function: Callable[[np.ndarray, np.ndarray], np.float64], 
     gradient_function: Callable[[np.ndarray, np.ndarray, float | np.ndarray, float], 
                                 tuple[float, float]],
-) -> tuple[float | np.ndarray, float, list[np.float64], list[list[float]]]:
+) -> tuple[float | np.ndarray, float, list[np.float64], list[list[float | np.ndarray]]]:
     """_summary_
 
     Args:
@@ -114,7 +148,7 @@ def gradient_descent(
     """
     
     cost_history: list[np.float64] = []
-    param_history: list[list[float]] = []
+    param_history: list[list[float | np.ndarray]] = []
     w = w_in
     b = b_in    
     
@@ -140,39 +174,25 @@ def gradient_descent(
         
     return w, b, cost_history, param_history
 
-def main():
-    x_train = np.array([1.0, 2.0])   #features
-    y_train = np.array([300.0, 500.0])   #target value
-    # initialize parameters
-    w_init = 0
-    b_init = 0
-    # some gradient descent settings
-    iterations = 100000
-    alpha = 1.0e-2
-    # run gradient descent
-    w_final, b_final, _, _ = gradient_descent(x_train ,y_train, w_init, b_init, alpha, 
-                                                        iterations, mean_squared_error, compute_gradients)
-    print(f"(w,b) found by gradient descent: ({w_final:8.4f},{b_final:8.4f})")
+def scale(features: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Scales each feature by dividing by its maximum value (feature-wise)"""
+    denom = np.max(features, axis=0) # devide by denom only if denom != 0
+    denom = np.where(denom==0, 1, denom)
+    return features / denom
 
-def main2():
-    x_train = np.array([1.0, 2.0])   #features
-    y_train = np.array([300.0, 500.0])   #target value
-    w = 0. # weight
-    b = 0. # base
-    alpha = 1.0e-2 # learning rate
-    
-    for _ in range(100_000):
-        y_hats = predict(x_train, w, b)
-        
-        dj_dw, dj_db = compute_gradients(x_train, y_train, w, b)
-        
-        w -= alpha * dj_dw
-        b -= alpha * dj_db
-    print(f"(w,b) found by gradient descent: ({w:8.4f},{b:8.4f})")
-    y_hats = predict(x_train, w, b)
-    cost = mean_squared_error(y_hats, y_train)
-    print(f"final_cost:{cost:.10f}")
-    
+def mean_normalization(features: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Applies mean normalization feature-wise."""
+    denom = (np.max(features, axis=0) - np.min(features, axis=0))
+    denom = np.where(denom == 0, 1, denom) 
+    return (features - np.mean(features, axis=0)) / denom
+
+def z_score_normalization(features: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Applies Z-score normalization feature-wise."""
+
+    mu = np.mean(features, axis=0)
+    sigma = np.std(features, axis=0) # np.sqrt(np.mean((features - mu)**2, axis=0))
+    sigma = np.where(sigma==0, 1, sigma)
+    return (features - mu) / sigma
     
 if __name__ == "__main__":
     main()
