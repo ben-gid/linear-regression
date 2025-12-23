@@ -13,10 +13,10 @@ def main():
     model = SigmoidNN()
     model.sequential(
         [
-            Layer(neuron_count=10),
-            Layer(neuron_count=20),
-            Layer(neuron_count=10),
-            Layer(neuron_count=1),
+            DenseLayer(neuron_count=10),
+            DenseLayer(neuron_count=20),
+            DenseLayer(neuron_count=10),
+            DenseLayer(neuron_count=1),
         ]
     )
     model.compile(features=X_train.shape[1], epochs=10, alpha=0.01)
@@ -66,17 +66,17 @@ class Neuron:
         self._b = b
         
         
-    def update(self, X:np.ndarray, y:np.ndarray, alpha: float) -> None:
-        """updates w and b by taking their gradient
+    # def update(self, X:np.ndarray, y:np.ndarray, alpha: float) -> None:
+    #     """updates w and b by taking their gradient
 
-        Args:
-            X (np.ndarray): data as 2d array
-            y (np.ndarray): values as 1d array
-            alpha (float): learning rate
-        """
-        dj_dw, dj_db = compute_sig_gradient(X, y, self.w, self.b)
-        self.w -= alpha * dj_dw
-        self.b -= alpha * dj_db
+    #     Args:
+    #         X (np.ndarray): data as 2d array
+    #         y (np.ndarray): values as 1d array
+    #         alpha (float): learning rate
+    #     """
+    #     dj_dw, dj_db = compute_sig_gradient(X, y, self.w, self.b)
+    #     self.w -= alpha * dj_dw
+    #     self.b -= alpha * dj_db
         
     def proba(self, X: np.ndarray) -> np.ndarray:
         return sigmoid(X, self.w, self.b)
@@ -96,13 +96,14 @@ class Neuron:
     def cost(self, X:np.ndarray, y:np.ndarray):
         return binary_cross_entropy(X, y, self.w, self.b)
     
-class Layer:
+class DenseLayer:
     # each layer containes multiple neurons
     # a layer should take in a list of data, send them through each neuron 
     # and return their output
     def __init__(self, neuron_count: int) -> None:
         self._neuron_count = neuron_count
         self._neurons = []
+        self.last_input = None
 
     @property
     def neuron_count(self):
@@ -133,19 +134,25 @@ class Layer:
         """
         self.neurons = [Neuron(features) for _ in range(self.neuron_count)]
         
-    def update(self, X:np.ndarray, y:np.ndarray, alpha: float) -> None:
+    def update(self, a_in:np.ndarray) -> None:
         """calls update on every neuron
 
         Args:
-            X (np.ndarray): data as 2d array
-            y (np.ndarray): values as 1d array
-            alpha (float): learning rate
+            a_in (np.ndarray): data as 2d array
 
         Raises:
             ValueError: if layer was never compiled
         """
         if len(self.neurons) == 0:
             raise ValueError("layer.compile() wasnt called yet")
+        
+        W = np.column_stack([neuron.w for neuron in self.neurons])
+        b = np.array([neuron.b for neuron in self.neurons])
+        a_out = np.zeros(self.neuron_count)
+        for j in range(self.neuron_count):
+            w = W[:,j]
+            a_out[j] = sigmoid(a_in, w, b[j])
+        # return a_out
         
     
     def proba(self, X:np.ndarray) -> np.ndarray: 
@@ -181,7 +188,7 @@ class Layer:
         Returns:
             np.ndarray: gradient of the cost with respect to the input
         """
-        raise
+        raise NotImplementedError()
 
     
     def cost(self, X:np.ndarray, y:np.ndarray):
@@ -194,24 +201,22 @@ class SigmoidNN:
     def __init__(self) -> None:
         self.layers = []
         self.alpha = None
-        self.epochs: Optional[int] = None
         
-    def sequential(self, layers: list[Layer]):
+    def sequential(self, layers: list[DenseLayer]):
         self.layers = layers
         
-    def compile(self, features: int, epochs: int=1, alpha=0.01):
+    def compile(self, features: int, alpha=0.01):
         self.alpha = alpha
-        self.epochs = epochs
         features_current = features
         for layer in self.layers:
             layer.compile(features_current)
             features_current = layer.neuron_count
 
-    def fit(self, X: np.ndarray, y: np.ndarray):
-        if self.alpha is None or self.epochs is None:
+    def fit(self, X: np.ndarray, y: np.ndarray, epochs: int=1):
+        if self.alpha is None:
             raise ValueError("you must run compile before fit")
         
-        for _ in range(self.epochs):
+        for _ in range(epochs):
             activations = [X] # store all activations for backprop
             current_a = X # set initial a to X
             for layer in self.layers:
