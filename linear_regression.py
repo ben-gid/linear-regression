@@ -1,7 +1,8 @@
 import math
 import numpy as np
 from typing import Callable
-from numpy.typing import NDArray
+
+from plot import plot_actual_vs_prediction
 
 def main():
     x_train = np.array([1.0, 2.0])   #features
@@ -10,11 +11,11 @@ def main():
     w_init = 0
     b_init = 0
     # some gradient descent settings
-    iterations = 100000
+    iterations = 100_000
     alpha = 1.0e-2
     # run gradient descent
     w_final, b_final, _, _ = gradient_descent(x_train ,y_train, w_init, b_init, alpha, 
-                                                        iterations, mean_squared_error, compute_gradients)
+                                                        iterations, mean_squared_error, compute_mse_gradients)
     print(f"(w,b) found by gradient descent: ({w_final:8.4f},{b_final:8.4f})")
 
 def main2():
@@ -25,9 +26,8 @@ def main2():
     alpha = 1.0e-2 # learning rate
     
     for _ in range(100_000):
-        y_hats = predict(x_train, w, b)
         
-        dj_dw, dj_db = compute_gradients(x_train, y_train, w, b)
+        dj_dw, dj_db = compute_mse_gradients(x_train, y_train, w, b)
         
         w -= alpha * dj_dw
         b -= alpha * dj_db
@@ -35,6 +35,8 @@ def main2():
     y_hats = predict(x_train, w, b)
     cost = mean_squared_error(y_hats, y_train)
     print(f"final_cost:{cost:.10f}")
+    plot_actual_vs_prediction(x_train, y_train, y_hats)
+    
     
 def mean_squared_error(y_hats: np.ndarray, ys: np.ndarray) -> np.float64:
     """_summary_
@@ -48,33 +50,6 @@ def mean_squared_error(y_hats: np.ndarray, ys: np.ndarray) -> np.float64:
     """
     m = y_hats.shape[0]
     return np.sum((y_hats -ys)**2) / (2 * m)
-
-def compute_gradient_w(y_hats: np.ndarray, ys: np.ndarray, xs: np.ndarray) -> float:
-    """_summary_
-
-    Args:
-        y_hats (np.ndarray): array of predictions
-        ys (np.ndarray): array of targets
-        xs (np.ndarray): array of training data
-
-    Returns:
-        float: weight gradient
-    """
-    m = y_hats.shape[0]
-    return xs.T @ (y_hats - ys) / m
-
-def compute_gradient_b(y_hats: np.ndarray, ys: np.ndarray) -> float:
-    """_summary_
-
-    Args:
-        y_hats (np.ndarray): array ofpredictions
-        ys (np.ndarray): array of targets
-
-    Returns:
-        float: base gradient
-    """
-    m = y_hats.shape[0]
-    return np.sum(y_hats - ys) / m
 
 
 def predict(xs: np.ndarray, w: np.ndarray | float, b: float) -> np.ndarray:
@@ -91,12 +66,12 @@ def predict(xs: np.ndarray, w: np.ndarray | float, b: float) -> np.ndarray:
     """
     return xs.dot(w) + b
 
-def compute_gradients(
+def compute_mse_gradients(
     xs: np.ndarray, 
     ys: np.ndarray, 
     w: float | np.ndarray, 
     b: float
-) -> tuple[float, float]: 
+) -> tuple[float | np.ndarray, float]: 
     """_summary_
 
     Args:
@@ -110,8 +85,9 @@ def compute_gradients(
         tuple[float, float]: gradients (weight gradient, base gradient)
     """
     y_hats = predict(xs, w, b)
-    dj_dw = compute_gradient_w(y_hats, ys, xs)
-    dj_db = compute_gradient_b(y_hats, ys)
+    m = xs.shape[0]
+    dj_dw = (y_hats - ys) @ xs.T / m
+    dj_db = np.sum(y_hats - ys) / m
     
     return dj_dw, dj_db
     
@@ -125,9 +101,9 @@ def gradient_descent(
     iterations: int,
     cost_function: Callable[[np.ndarray, np.ndarray], np.float64], 
     gradient_function: Callable[[np.ndarray, np.ndarray, float | np.ndarray, float], 
-                                tuple[float, float]],
+                                tuple[float | np.ndarray, float]],
 ) -> tuple[float | np.ndarray, float, list[np.float64], list[list[float | np.ndarray]]]:
-    """_summary_
+    """applies gradient descent to find cost minimum. 
 
     Args:
         xs (np.ndarray): array of training data
@@ -138,9 +114,8 @@ def gradient_descent(
         alpha (float): learning rate
         iterations (int): number of iterations to calculate gradient and update parameters
         cost_function (Callable[[np.ndarray, np.ndarray], np.float64]): function to calculate cost 
-            (mean_squared_error preferred to reach global minimun)
         gradient_function (Callable[[np.ndarray, np.ndarray, float, float], tuple[float, float]]): 
-            function to calculate gradient
+            function to calculate cost function gradient
 
     Returns:
         tuple[float, float, list[np.float64], list[list[float]]]: [final weight, final base, 
@@ -173,27 +148,6 @@ def gradient_descent(
                   f"w: {w: 0.3e}, b:{b: 0.5e}")
         
     return w, b, cost_history, param_history
-
-def scale(features: NDArray[np.float64]) -> NDArray[np.float64]:
-    """Scales each feature by dividing by its maximum value (feature-wise)"""
-    denom = np.max(features, axis=0) # devide by denom only if denom != 0
-    denom = np.where(denom==0, 1, denom)
-    return features / denom
-
-def mean_normalization(features: NDArray[np.float64]) -> NDArray[np.float64]:
-    """Applies mean normalization feature-wise."""
-    denom = (np.max(features, axis=0) - np.min(features, axis=0))
-    denom = np.where(denom == 0, 1, denom) 
-    return (features - np.mean(features, axis=0)) / denom
-
-def z_score_normalization(features: NDArray[np.float64]) -> NDArray[np.float64]:
-    """Applies Z-score normalization feature-wise."""
-
-    mu = np.mean(features, axis=0)
-    sigma = np.std(features, axis=0) # np.sqrt(np.mean((features - mu)**2, axis=0))
-    sigma = np.where(sigma==0, 1, sigma)
-    return (features - mu) / sigma
     
 if __name__ == "__main__":
-    main()
     main2()
