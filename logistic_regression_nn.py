@@ -19,8 +19,8 @@ def main():
             DenseLayer(neuron_count=1),
         ]
     )
-    model.compile(features=X_train.shape[1], epochs=10, alpha=0.01)
-    model.fit(X_train, y_train)
+    model.compile(features=X_train.shape[1], alpha=0.01)
+    model.fit(X_train, y_train, epochs=10)
     predictions = model.predict(X_test)
     # print(f"final cost on test set: {final_cost}")
        
@@ -65,35 +65,22 @@ class Neuron:
             raise ValueError("b can only be a float")
         self._b = b
         
-        
-    # def update(self, X:np.ndarray, y:np.ndarray, alpha: float) -> None:
-    #     """updates w and b by taking their gradient
-
-    #     Args:
-    #         X (np.ndarray): data as 2d array
-    #         y (np.ndarray): values as 1d array
-    #         alpha (float): learning rate
-    #     """
-    #     dj_dw, dj_db = compute_sig_gradient(X, y, self.w, self.b)
-    #     self.w -= alpha * dj_dw
-    #     self.b -= alpha * dj_db
-        
-    def proba(self, X: np.ndarray) -> np.ndarray:
-        return sigmoid(X, self.w, self.b)
-    
-    
-    def predict(self, X:np.ndarray) -> int:
-        """uses the neurons weights to predict y value for x
+    def forward(self, a_in: np.ndarray) -> np.ndarray:
+        """predicts output using sigmoid
 
         Args:
-            X (np.ndarray): data to predict as 2d array
+            a_in (np.ndarray): activation; input as 2d array
 
         Returns:
-            int: 1 or 0
+            np.ndarray: output (y_hat)
         """
-        return predict(X, self.w, self.b)
+        return sigmoid(a_in, self.w, self.b)
     
-    def cost(self, X:np.ndarray, y:np.ndarray):
+    
+    def sig_gradient(self, X:np.ndarray, y: np.ndarray):
+        return compute_sig_gradient(X, y, self.w, self.b)
+    
+    def loss(self, X:np.ndarray, y:np.ndarray):
         return binary_cross_entropy(X, y, self.w, self.b)
     
 class DenseLayer:
@@ -133,50 +120,30 @@ class DenseLayer:
             features (int): features for w (X.shape[1])
         """
         self.neurons = [Neuron(features) for _ in range(self.neuron_count)]
-        
-    def update(self, a_in:np.ndarray) -> None:
-        """calls update on every neuron
-
-        Args:
-            a_in (np.ndarray): data as 2d array
-
-        Raises:
-            ValueError: if layer was never compiled
-        """
-        if len(self.neurons) == 0:
-            raise ValueError("layer.compile() wasnt called yet")
-        
-        W = np.column_stack([neuron.w for neuron in self.neurons])
-        b = np.array([neuron.b for neuron in self.neurons])
-        a_out = np.zeros(self.neuron_count)
-        for j in range(self.neuron_count):
-            w = W[:,j]
-            a_out[j] = sigmoid(a_in, w, b[j])
-        # return a_out
-        
     
-    def proba(self, X:np.ndarray) -> np.ndarray: 
+    def proba(self, a_in:np.ndarray) -> np.ndarray: 
         """calculates the probability of all neurons
 
         Args:
-            X (np.ndarray): data as 2d array
+            a_in (np.ndarray): input activation as 2d array to be passed to every neuron
 
         Returns:
             np.ndarray: 1d array of neurons proba
         """
-        return np.array([n.proba(X) for n in self.neurons]).T # transpose to get correct shape
+        # transpose to get correct shape
+        return np.array([neuron.forward(a_in) for neuron in self.neurons]).T 
                 
-    def forward(self, X: np.ndarray) -> np.ndarray:
+    def forward(self, a_in: np.ndarray) -> np.ndarray:
         """Saves X to last_input and returns proba/sigmoid for forward propogation
 
         Args:
-            X (np.ndarray): data as 2d array
+            a_in (np.ndarray): input activation as 2d array
 
         Returns:
             np.ndarray: probility of X; y_hat
         """
-        self.last_input = X
-        return self.proba(X)
+        self.last_input = a_in
+        return self.proba(a_in)
     
     def backward(self, upstream_grad: np.ndarray, alpha: float) -> np.ndarray:
         """performs backpropagation for the layer
@@ -186,13 +153,26 @@ class DenseLayer:
             alpha (float): learning rate
 
         Returns:
-            np.ndarray: gradient of the cost with respect to the input
+            np.ndarray: gradient of the cost with respect to the weight
         """
-        raise NotImplementedError()
+        if not self.last_input:
+            raise RuntimeError()
+        # dal/dzl
+        sig_gradient = a_in @ (1 - a_in)
+        # dc/dal
+        cost_gradient = 2 * (a_in - y)
+        #dzl/dwl
+        self.last_input
 
     
-    def cost(self, X:np.ndarray, y:np.ndarray):
-        return np.mean([n.cost(X, y) for n in self.neurons])
+    def losses(self, X:np.ndarray, y:np.ndarray) -> np.ndarray:
+        return np.array([n.loss(X, y) for n in self.neurons])
+    
+    def sig_gradients(self, a_in: np.ndarray, y:np.ndarray) -> list[tuple[np.ndarray, float]]:
+        return [neuron.sig_gradient(a_in, y) for neuron in self.neurons]
+    
+    def weights(self) -> np.ndarray:
+        return np.array([neuron.w for neuron in self.neurons])
 
 class SigmoidNN:
     # creates a nerual network comprized of many layers.
@@ -201,6 +181,7 @@ class SigmoidNN:
     def __init__(self) -> None:
         self.layers = []
         self.alpha = None
+        self.W = None
         
     def sequential(self, layers: list[DenseLayer]):
         self.layers = layers
@@ -222,7 +203,48 @@ class SigmoidNN:
             for layer in self.layers:
                 current_a = layer.forward(current_a)
                 activations.append(current_a)
-            # TODO:backpropagation
+            
+            # --- BACKWARD PASS ---
+            # 1. Calculate the Error at the very end
+            # Error = (Last_Layer_Output - y)
+            # error = (activations[-1] - y) ** 2 # delta of last layer
+            # cost = self.layers[-1].cost(activations[-1], y) self
+            
+            # 2. Iterate through layers in REVERSE order
+            for i in reversed(range(len(self.layers))):
+                layer = self.layers[i]
+                a_in = activations[i] # This is what was fed into it
+                
+                # cost of current layer
+                cost = (a_in - y) ** 2
+                # 3. Calculate Gradients
+                if not layer.last_input:
+                    raise RuntimeError()
+                # dal/dzl
+                sig_gradient = a_in @ (1 - a_in)
+                # dc/dal
+                cost_gradient = 2 * (a_in - y)
+                
+                upstream_gradient = layer.last_input @ sig_gradient @ cost_gradient
+                # dW = Input_Transposed * Error
+                dW = a_in.T * cost
+                # db = Sum of Error
+                db = np.sum(cost)
+                
+                
+                # 4. Calculate Error for the PREVIOUS layer (The Chain Rule)
+                # New_Error = (Error * Weights_Transposed) * Sigmoid_Derivative(input)
+                # gradients = layer.sig_gradients(a_in, y)
+                W = layer.weights()
+                new_error = ((cost * W.T) * dW) 
+                
+                # 5. Update Weights
+                # layer.w = layer.w - (alpha * dW)
+                layer.w 
+                # layer.b = layer.b - (alpha * db)
+                
+                # 6. Pass the 'New_Error' back to the next loop iteration
+                cost = New_Error
                 
     def predict(self, X:np.ndarray) -> np.ndarray:
         a = X # set initial a to X

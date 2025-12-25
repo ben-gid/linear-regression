@@ -1,30 +1,9 @@
 import numpy as np
 from sklearn.model_selection import train_test_split
 from typing import Sequence, Optional
-from logistic_regression import sigmoid, compute_sig_gradient, predict,\
-    binary_cross_entropy
-from generate_data import generate_seperable
+from logistic_regression import sigmoid, predict, binary_cross_entropy
 
-def main():
-    X, y = generate_seperable(20)
-    
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    model = SigmoidNN()
-    model.sequential(
-        [
-            Layer(neuron_count=10),
-            Layer(neuron_count=20),
-            Layer(neuron_count=10),
-            Layer(neuron_count=1),
-        ]
-    )
-    model.compile(features=X_train.shape[1], epochs=10, alpha=0.01)
-    model.fit(X_train, y_train)
-    predictions = model.predict(X_test)
-    # print(f"final cost on test set: {final_cost}")
-       
-    
-    
+
 class Neuron:
     """neuron that uses the sigmoid function for learning
 
@@ -61,21 +40,7 @@ class Neuron:
     def b(self, b: float):
         if not isinstance(b, float):
             raise ValueError("b can only be a float")
-        self._b = b
-        
-        
-    def update(self, X:np.ndarray, y:np.ndarray, alpha: float) -> None:
-        """updates w and b by taking their gradient
-
-        Args:
-            X (np.ndarray): data as 2d array
-            y (np.ndarray): values as 1d array
-            alpha (float): learning rate
-        """
-        dj_dw, dj_db = compute_sig_gradient(X, y, self.w, self.b)
-        self.w -= alpha * dj_dw
-        self.b -= alpha * dj_db
-        
+        self._b = b 
         
     def proba(self, X: np.ndarray) -> np.ndarray:
         return sigmoid(X, self.w, self.b)
@@ -130,22 +95,6 @@ class Layer:
             features (int): features for w (X.shape[1])
         """
         self.neurons = [Neuron(features) for _ in range(self.neuron_count)]
-        
-    def update(self, X:np.ndarray, y:np.ndarray, alpha: float) -> None:
-        """calls update on every neuron
-
-        Args:
-            X (np.ndarray): data as 2d array
-            y (np.ndarray): values as 1d array
-            alpha (float): learning rate
-
-        Raises:
-            ValueError: if layer was never compiled
-        """
-        if len(self.neurons) == 0:
-            raise ValueError("layer.compile() wasnt called yet")
-        for n in self.neurons:
-            n.update(X, y, alpha)
     
     def proba(self, X:np.ndarray) -> np.ndarray: 
         """calculates the probability of all neurons
@@ -167,31 +116,21 @@ class SigmoidNN:
     # function to train predict, and evaluate
     def __init__(self) -> None:
         self.layers = []
-        self.alpha = None
-        self.epochs: Optional[int] = None
         
     def sequential(self, layers: list[Layer]):
         self.layers = layers
         
-    def compile(self, features: int, epochs: int=1, alpha=0.01):
-        self.alpha = alpha
-        self.epochs = epochs
+    def compile(self, features: int):
         features_current = features
         for layer in self.layers:
             layer.compile(features_current)
             features_current = layer.neuron_count
 
-    def fit(self, X: np.ndarray, y: np.ndarray):
-        if self.alpha is None or self.epochs is None:
-            raise ValueError("you must run compile before fit")
-        
-        for _ in range(self.epochs):
-            a = X # set initial a to X
-            for i in range(len(self.layers)):
-                layer = self.layers[i] 
-                layer.update(a, y, self.alpha)
-                a = layer.proba(a)
-                # print(f"Layer {i} cost: {layer.cost(X, y)}")
+    def forward(self, X: np.ndarray, y: np.ndarray):   
+        a = X # set initial a to X
+        for i in range(len(self.layers)):
+            layer = self.layers[i] 
+            a = layer.proba(a)
                 
     def predict(self, X:np.ndarray) -> np.ndarray:
         a = X # set initial a to X
@@ -201,5 +140,3 @@ class SigmoidNN:
             a = layer.proba(a)
         return a
     
-if __name__ == "__main__":
-    main()
